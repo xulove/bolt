@@ -306,7 +306,6 @@ func TestOpen_Size_Large(t *testing.T) {
 		t.Fatalf("unexpected file growth: %d => %d", sz, newSz)
 	}
 }
-
 // Ensure that a re-opened database is consistent.
 func TestOpen_Check(t *testing.T) {
 	path := tempfile()
@@ -372,7 +371,6 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 
 	initMmapSize := 1 << 31  // 2GB
 	testWriteSize := 1 << 27 // 134MB
-
 	db, err := bolt.Open(path, 0666, &bolt.Options{InitialMmapSize: initMmapSize})
 	if err != nil {
 		t.Fatal(err)
@@ -425,6 +423,7 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDB_Begin_ErrDatabaseNotOpen(t *testing.T) {
 	var db bolt.DB
+	t.Log("log log log")
 	if _, err := db.Begin(false); err != bolt.ErrDatabaseNotOpen {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -434,7 +433,7 @@ func TestDB_Begin_ErrDatabaseNotOpen(t *testing.T) {
 func TestDB_BeginRW(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
-
+	t.Log("falsdkfjalskdf")
 	tx, err := db.Begin(true)
 	if err != nil {
 		t.Fatal(err)
@@ -1543,3 +1542,5 @@ func u64tob(v uint64) []byte {
 
 // btou64 converts an 8-byte slice into an uint64.
 func btou64(b []byte) uint64 { return binary.BigEndian.Uint64(b) }
+
+

@@ -148,6 +148,7 @@ func (db *DB) String() string {
 // If the file does not exist then it will be created automatically.
 // Passing in nil options will cause Bolt to open the database with the default options.
 func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
+	//创建DB对象，并将其状态设为opened；
 	var db = &DB{opened: true}
 
 	// Set default options if no options are provided.
@@ -161,16 +162,22 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
 	db.AllocSize = DefaultAllocSize
-
+	//根据Open参数ReadOnly决定是否以进程独占的方式打开文件，
+	// 如果以只读方式访问数据库文件，则不同进程可以共享读该文件；
+	// 如果以读写方式访问数据库文件，则文件锁将被独占，其他进程无法同时以读写方式访问该数据库文件
+	// 这是为了防止多个进程同时修改文件；
+	// O_RDWR :os系统包下面的一个常量
+	// O_RDWR   int = syscall.O_RDWR  读写模式打开文件
 	flag := os.O_RDWR
 	if options.ReadOnly {
-		flag = os.O_RDONLY
+		flag = os.O_RDONLY  //只读模式打开文件
 		db.readOnly = true
 	}
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
 	var err error
+	// 调用系统的OpenFile方法，打开文件（没有文件的话 -> 创建）
 	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
 		_ = db.close()
 		return nil, err
@@ -192,15 +199,22 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	db.ops.writeAt = db.file.WriteAt
 
 	// Initialize the database if it doesn't exist.
+	// 如果数据库存在的话，什么都不说了。不存在的话，初始化
+	// file.Stat() :Stat返回文件的FileInfo类型值
 	if info, err := db.file.Stat(); err != nil {
 		return nil, err
 	} else if info.Size() == 0 {
+		// 如果文件大小为零，则对db进行初始化
+		//
 		// Initialize new files with meta pages.
 		if err := db.init(); err != nil {
 			return nil, err
 		}
 	} else {
+		// 如果文件大小不为0
 		// Read the first meta page to determine the page size.
+		//如果大小不为零，则试图读取前4K个字节来确定当前数据库的pageSize。
+		// 随后我们分析db的初始化时，会看到db的文件格式，可以进一步理解这里的逻辑
 		var buf [0x1000]byte
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
@@ -227,12 +241,15 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 
 	// Memory map the data file.
+	//通过mmap对打开的数据库文件进行内存映射，并初始化db对象中的meta指针
 	if err := db.mmap(options.InitialMmapSize); err != nil {
 		_ = db.close()
 		return nil, err
 	}
 
 	// Read in the freelist.
+	//读数据库文件中的freelist页，并初始化db对象中的freelist列表。
+	// freelist列表中记录着数据库文件中的空闲页。
 	db.freelist = newFreelist()
 	db.freelist.read(db.page(db.meta().freelist))
 
@@ -342,6 +359,10 @@ func (db *DB) mmapSize(size int) (int, error) {
 // init creates a new database file and initializes its meta pages.
 func (db *DB) init() error {
 	// Set the page size to the OS page size.
+	// os.Getpagesize()是获取系统内存页的大小
+	// 解释下内存页，操作系统以内存页来管理内存。内存页的大小对操作系统的影响很大
+	// 内存页设置的太小，内存页就会很多，管理内存页的数组就大，消耗内存
+	// 内存页设置的太大，一个进程消耗的内存是内存页大小的整数倍，会导致碎片。
 	db.pageSize = os.Getpagesize()
 
 	// Create two meta pages on a buffer.
